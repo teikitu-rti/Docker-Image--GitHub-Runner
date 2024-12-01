@@ -1,0 +1,118 @@
+# escape=`
+
+# Use the latest ubuntu LTS image
+FROM ubuntu:24.04
+
+# Input GitHub runner version argument
+ARG RUNNER_VERSION
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Additional label information
+LABEL Author="Andrew Aye"
+LABEL Email="github.sublime362@passmail.net"
+LABEL GitHub="https://github.com/teikitu/teikitu-release"
+LABEL BaseImage="ubuntu:24.04"
+LABEL RunnerVersion=${RUNNER_VERSION}
+
+# Update the base packages
+RUN apt-get update -y
+
+# APT Installs and Upgrades
+RUN apt-get install -y build-essential
+RUN apt-get install -y unzip
+RUN apt-get install -y jq
+RUN apt-get install -y libssl-dev
+RUN apt-get install -y lsb-release
+RUN apt-get install -y gpg
+RUN apt-get install -y gnupg
+RUN apt-get install -y software-properties-common
+RUN apt-get install -y libtool
+RUN apt-get install -y autoconf
+RUN apt-get install -y wget
+
+# Install Python
+RUN apt-get install -y python3
+RUN apt-get install -y python3-pip
+RUN apt-get install -y libpython3-dev
+
+# GLFW
+RUN apt-get install -y doxygen
+RUN apt-get install -y xorg-dev
+RUN apt-get install -y libglu1-mesa-dev
+
+# Dependencies for Doxygen
+RUN apt-get install -y flex
+RUN apt-get install -y bison
+RUN apt-get install -y libedit-dev
+RUN apt-get install -y openjdk-21-jdk
+
+# Install Python dependencies needed for OpenUSD
+RUN pip3 install Jinja2 --break-system-packages
+RUN pip3 install PyOpenGL --break-system-packages
+RUN pip3 install pyside6 --break-system-packages
+
+# Action Runner dependencies
+RUN apt-get install -y liblttng-ust1
+RUN apt-get install -y curl
+
+# Git
+RUN apt-get install -y git
+
+# GitHub CLI
+RUN apt-get install -y gh
+
+# Development tools
+RUN apt-get install -y ninja-build
+RUN apt-get install -y nodejs
+RUN apt-get install -y libcurl4-openssl-dev
+
+# Check for any upgrades for packages that were installed
+RUN apt-get upgrade -y
+
+# Powershell
+RUN wget https://github.com/PowerShell/PowerShell/releases/download/v7.4.6/powershell_7.4.6-1.deb_amd64.deb `
+    && dpkg -i powershell_7.4.6-1.deb_amd64.deb `
+    && apt-get install -f `
+    && rm powershell_7.4.6-1.deb_amd64.deb
+
+# CMake
+RUN dpkg -r --force-depends "cmake"
+ADD cmake-3.31.0-g3d84ef8-Linux-x86_64.sh cmake-3.31.0-g3d84ef8-Linux-x86_64.sh
+RUN chmod +x cmake-3.31.0-g3d84ef8-Linux-x86_64.sh
+RUN ./cmake-3.31.0-g3d84ef8-Linux-x86_64.sh --skip-license --prefix=/usr/local
+RUN rm cmake-3.31.0-g3d84ef8-Linux-x86_64.sh
+
+# Action Runner dependencies
+RUN wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh `
+    && chmod +x ./dotnet-install.sh `
+    && ./dotnet-install.sh --version latest `
+    && rm dotnet-install.sh
+
+# LLVM 19.1.5
+RUN wget --no-check-certificate https://apt.llvm.org/llvm.sh `
+    && chmod +x ./llvm.sh `
+    && ./llvm.sh 19 all `
+    && rm llvm.sh
+
+# add a non-sudo user
+RUN useradd -m docker
+
+# cd into the user directory, download and unzip the github actions runner
+RUN cd /home/docker && mkdir actions-runner && cd actions-runner `
+    && curl -O -L https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz `
+    && tar xzf ./actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
+
+# install some additional dependencies
+RUN chown -R docker ~docker && /home/docker/actions-runner/bin/installdependencies.sh
+
+# add over the start.sh script
+ADD start.sh start.sh
+
+# make the script executable
+RUN chmod +x start.sh
+
+# set the user to "docker" so all subsequent commands are run as the docker user
+USER docker
+
+# set the entrypoint to the start.sh script
+ENTRYPOINT ["./start.sh"]
